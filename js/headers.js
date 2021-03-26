@@ -6,7 +6,6 @@ function HeadersHandler(messagesHandler) {
 	var packageHeader2 = 'php-console';
 	var postponeHeader = 'PHP-Console-Postpone';
 	var postponeHeader2 = 'php-console-postpone';
-	var evalFile = new RegExp('EvalProvider\.php.*?eval', 'i');
     var ipRegexp = new RegExp('^[\\d]+\\.[\\d]+\\.[\\d]+\\.[\\d]+$');
 	var isUrlRegexp = new RegExp('^http', 'i');
 	var baseUrlRegexp = new RegExp('^(.+[/\\\\])');
@@ -69,10 +68,6 @@ function HeadersHandler(messagesHandler) {
 					}
 					else if(!message['tags']) {
 						message['tags'] = [message['type']];
-					}
-
-					if(message['file'] && evalFile.exec(message['file'])) {
-						message['file'] = 'terminal';
 					}
 				}
 			}

@@ -34,14 +34,7 @@ if(serverProtocol) {
 			for(var i in pack['messages']) {
 				var message = pack['messages'][i];
 				clearObjectPrototype(message['args']);
-				if(message['type'] == 'eval_result') {
-					for(var ii in message['args']) {
-						console.log.apply(console, message['args'][ii]);
-					}
-				}
-				else {
-					message['type'] == 'error' ? console.error.apply(console, message['args']) : console.log.apply(console, message['args']);
-				}
+				message['type'] == 'error' ? console.error.apply(console, message['args']) : console.log.apply(console, message['args']);
 			}
 			console.groupEnd();
 		}

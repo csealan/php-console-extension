@@ -1,4 +1,4 @@
-function MessagesHandler(options, auth, notificationsHandler, app) {
+function MessagesHandler(options, notificationsHandler, app) {
 
 	this.domainsSsl = {};
 	this.tabsUrls = {};
@@ -28,26 +28,6 @@ function MessagesHandler(options, auth, notificationsHandler, app) {
 				icon = 'logo_16_fail.png';
 				popup = 'wrong_protocol.html';
 				title = 'Wrong version of PHP Console server. Click on this icon to get update instructions.'; // TODO: add open github on click
-			}
-			/*else if(!options['enabled']) {
-			 icon = 'logo_16_grey.png';
-			 title = 'PHP Console is disabled on client';
-			 }*/
-			else if(pack['auth']) {
-				if(pack['isEvalEnabled']) {
-					icon = 'terminal_16.png';
-					title = 'PHP Console eval is enabled on server. Click on this icon to access eval & options form.';
-					popup = 'terminal/popup.html';
-				}
-				else if(pack['auth']['isSuccess']) {
-					title = 'PHP Console is active on server protected by password. Click on this icon to see options.';
-					popup = 'logout/popup.html';
-				}
-				else {
-					icon = 'key_16.png';
-					title = 'PHP Console authorization required. Click on this icon to see authorization form.';
-					popup = 'auth/popup.html';
-				}
 			}
 			onTabReady(tabId, function() {
 				chrome.pageAction.setTitle({'tabId': tabId, 'title': title});
@@ -152,8 +132,6 @@ function MessagesHandler(options, auth, notificationsHandler, app) {
 			return;
 		}
 
-		auth.handleServerAuth(lastPack);
-
 		if(lastPack['docRoot']) {
 			domainsDocRoots[lastPack['domain']] = self.fixSlashes(lastPack['docRoot']);
 		}
@@ -173,20 +151,15 @@ function MessagesHandler(options, auth, notificationsHandler, app) {
 					var consoleMessages = [];
 					var notifyMessages = [];
 					var errorInPack = false;
-					var evalInPack = false;
 
 					for(var i in messages) {
 						var message = messages[i];
 						prepareMessageData(message);
-						var sendToConsole = message['type'] == 'eval_result';
-						sendToConsole |= options['consoleErrors'] && message['type'] == 'error';
+						var sendToConsole = options['consoleErrors'] && message['type'] == 'error';
 						sendToConsole |= options['consoleDebug'] && message['type'] == 'debug';
 						if(sendToConsole) {
 							if(message['type'] == 'error') {
 								errorInPack = true;
-							}
-							else if(message['type'] == 'eval_result') {
-								evalInPack = true;
 							}
 							handleConsoleMessageBeforeSend(message);
 							consoleMessages.push(message);
@@ -203,27 +176,17 @@ function MessagesHandler(options, auth, notificationsHandler, app) {
 					// send to console
 					if(consoleMessages.length) {
 						var orderedMessages = [];
-						if(evalInPack) {
-							var types = ['debug', 'eval_result', 'error'];
-							for(var i in types) {
-								for(var ii in consoleMessages) {
-									if(consoleMessages[ii]['type'] == types[i]) {
-										orderedMessages.push(consoleMessages[ii]);
-									}
-								}
-							}
-						}
 						consolePacks.push({
 							'url': pack['url'],
 							'redirectUrl': pack['redirectUrl'],
 							'groupName': pack['redirectUrl'] ? pack['url'] + ' --> ' + pack['redirectUrl'] : pack['url'],
-							'collapse': !evalInPack && !errorInPack && (pack['redirectUrl'] || options['consoleCollapseNoErrors']),
+							'collapse': !errorInPack && (pack['redirectUrl'] || options['consoleCollapseNoErrors']),
 							'messages': orderedMessages.length ? orderedMessages : consoleMessages
 						});
 					}
 
 					// notify
-					if(notifyMessages.length && !evalInPack) {
+					if(notifyMessages.length) {
 						var orderedMessages = [];
 						for(var i in notifyMessages) {
 							if(notifyMessages[i]['type'] == 'error') {
@@ -253,27 +216,14 @@ function MessagesHandler(options, auth, notificationsHandler, app) {
 	};
 
 	function handleConsoleMessageBeforeSend(message) {
-		if(message['type'] == 'eval_result') {
-			var css = 'color: white; background: black';
-			var args = [];
-			if(message['output']) {
-				args.push(['%c output ', css, message['output']]);
+		var args = ['%c ' + message['tags'].join('.') + ' ', 'color: white; background: ' + (message['type'] == 'debug' ? 'blue' : 'red'), message['data']];
+		if(message['path'] || message['trace']) {
+			args.push('-');
+			if(message['path']) {
+				args.push(message['path'] + (message['line'] ? ':' + message['line'] : ''));
 			}
-			args.push(['%c return ', css, message['return']]);
-			if(message['time'] && options['evalShowTime']) {
-				args.push(['%c time ', css, message['time']]);
-			}
-		}
-		else {
-			var args = ['%c ' + message['tags'].join('.') + ' ', 'color: white; background: ' + (message['type'] == 'debug' ? 'blue' : 'red'), message['data']];
-			if(message['path'] || message['trace']) {
-				args.push('-');
-				if(message['path']) {
-					args.push(message['path'] + (message['line'] ? ':' + message['line'] : ''));
-				}
-				if(message['trace']) {
-					args.push('\n' + message['trace']);
-				}
+			if(message['trace']) {
+				args.push('\n' + message['trace']);
 			}
 		}
 		message['args'] = args;

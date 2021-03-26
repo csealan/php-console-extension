@@ -9,7 +9,6 @@ function NotificationsHandler(options) {
 		'update': 'ok.png',
 		'js_error': 'js_error.png',
 		'error': 'error.png',
-		'ahtung': 'ahtung.png',
 		'debug': 'info.png'
 	};
 	var self = this;
@@ -79,7 +78,7 @@ function NotificationsHandler(options) {
 
 		if(message['path']) {
 			var maxLen = 50;
-			var open = options['notifyJumpToFile'] && message['isLocal'] && message['type'] != 'eval_result' && message['line'];
+			var open = options['notifyJumpToFile'] && message['isLocal'] && message['line'];
 			var source = message['path'] + (message['line'] ? ' ' + message['line'] : '');
 			obj['buttons'].push({
 				'title': source.length <= maxLen ? source : ('...' + source.substr(-(maxLen - 3))),

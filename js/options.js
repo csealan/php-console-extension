@@ -15,8 +15,6 @@ function Options(callback) {
 		'notifyLifeTime': '',
 		'notifyCopyToClipboard': false,
 		'notifyJumpToFile': false,
-		'evalClearConsole': true,
-		'evalShowTime': true
 	};
 
 	function storeSet(option, value) {
@@ -51,15 +49,6 @@ function Options(callback) {
 	}
 
 	function initDefaultOptions() {
-		// flush old settings
-		if(typeof localStorage['evalShowTime'] == 'undefined') {
-			for(var i in localStorage) {
-				if(i != 'version') {
-					delete localStorage[i];
-				}
-			}
-		}
-
 		for(var option in options) {
 			var value = storeGet(option);
 			if(value === null) {
@@ -75,7 +64,6 @@ function Options(callback) {
 	}
 
 	var serverOptionsDefaults = {
-		'auth': {},
 		'ignoreErrors': {},
 		'ignoreDebug': {}
 	};
