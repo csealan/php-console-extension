@@ -1,148 +1,159 @@
 window['app'] = new function() {
-	var self = this;
-	var tabsUrls = {};
-	var lastChangeLogVersion = 2.9;
-	var listenDomains = {};
+  const self          = this;
 
-	var isUpdated = false;
-	var options = null;
-	//noinspection JSUnresolvedVariable
-	var runtime = chrome.runtime; // sec
-	//noinspection JSUnresolvedFunction
-	var manifest = runtime.getManifest();
-	var messagesHandler = null;
-	var headersHandler = null;
-	var clientCookie = 'php-console-client';
-	var notificationsHandler = null;
-	var sslRegexp = new RegExp('^https://', 'i');
-	var _tabsIndex = 0;
-	this._tabsIds = {};
+  let listenDomains   = {};
+  let headersHandler  = null;
+  let lastDomainsUrls = {};
+  let _tabsIndex      = 0;
+  let _tabsIds        = {};
+  let packsQueue      = [];
 
-	this['getOptions'] = function() {
-		return options;
-	};
+  self.protocol = 5;
 
-	function setClientInfo(tabId, domain, callback) {
-		options['getServer'](domain, function(server) {
-			var clientInfo = {'php-console-client': options.protocol};
+  /**
+   * Output the messages in console
+   */
+  function handleMessagesPacksQueue() {
+    if (!packsQueue.length) {
+      return;
+    }
 
-			// cookie
-			var ssl = messagesHandler.domainsSsl[domain] || false;
-			var url = (ssl ? 'https' : 'http') + '://' + domain;
-			var data = btoa(JSON.stringify(clientInfo));
-			chrome.cookies.get({
-				'url': url,
-				'name': clientCookie
-			}, function(cookie) {
-				if(!cookie || cookie.value != data || (ssl && cookie.secure != ssl)) {
-					chrome.cookies.set({
-						'url': url,
-						'name': clientCookie,
-						'secure': ssl,
-						'value': data
-					}, function() {
-						callback
-							? callback(true)
-							: chrome.tabs.reload(tabId, {'bypassCache': true});
-					});
-				}
-				else {
-					callback();
-				}
-			});
-		});
-	}
+    const packs = packsQueue.slice(0);
+    packsQueue = [];
 
-	this.sendConsoleMessage = function(tabId, request) {
-		request['_id'] = self._tabsIds[tabId];
-		chrome.tabs.sendMessage(tabId, request);
-	};
+    let consolePacks = [];
 
-	function registerTabClient(tabId, url, protocol, callback) {
-		if(protocol != options['protocol']) {
-			messagesHandler.updateIcon({
-				'tabId': tabId,
-				'protocol': protocol
-			});
-		}
-		tabsUrls[tabId] = url;
-		var domain = messagesHandler.getUrlDomain(url);
-		var baseDomain = messagesHandler.getBaseDomain(domain);
+    // Validate protocol
+    const lastPack = packs[packs.length - 1];
+    if (lastPack['protocol'] != self.protocol) {
+      return;
+    }
 
-		var listenerReload = false;
+    // Prepare the console messages
+    for (const pack of packs) {
+      if (!pack['messages']) {
+        continue
+      }
 
-		if(!listenDomains[baseDomain]) {
-			listenDomains[baseDomain] = true;
-			headersHandler.addListener(baseDomain);
-			listenerReload = true;
-		}
+      // Convert messages to console format
+      const messages = pack['messages'];
+      let consoleMessages = [];
+      for (const message of messages) {
+        message['args'] = ['%c ' + message['tags'] + ' ', 'color: white; background: blue', message['data']];
+        consoleMessages.push(message);
+      }
 
-		setClientInfo(tabId, domain, function(cookieReload) {
-			id = _tabsIndex++;
-			self._tabsIds[tabId] = id;
-			callback(id, listenerReload || cookieReload);
-		});
-	}
+      // Pack the console messages
+      if (consoleMessages.length) {
+        consolePacks.push({
+          'url'    : pack['url'],
+          'groupName'  : pack['url'],
+          'collapse'   : false,
+          'messages'   : consoleMessages
+        });
+      }
+    }
 
-	this['getActiveTab'] = function(callback) {
-		chrome.tabs.query({'currentWindow': true, 'active': true}, function(tabs) {
-				var tabId = tabs[0].id;
-				var url = messagesHandler.tabsUrls[tabId] ? messagesHandler.tabsUrls[tabId] : tabs[0].url;
-				callback(tabId, messagesHandler.getUrlDomain(url));
-			}
-		);
-	};
+    // Send the console messages
+    if (consolePacks.length) {
+      let isReady = false;
+      const tabId = lastPack['tabId'];
 
-	chrome.extension.onMessage.addListener(function(request, sender, sendResponse) {
-		if(request['_registerTab']) {
-			var url = request['url'];
-			if(url.indexOf('chrome-extension://') == 0) {
-				return true;
-			}
-			registerTabClient(sender.tab.id, url, request['protocol'], function(id, reload) {
-				sendResponse({
-					'id': id,
-					'url': messagesHandler.domainsSsl[messagesHandler.getUrlDomain(url)] && !sslRegexp.exec(url)
-						? url.replace('http://', 'https://')
-						: (reload ? url : '')
-				});
-			});
-			return true;
-		}
-	});
+      let interval = setInterval(function() {
+        chrome.tabs.get(tabId, function(tab) {
+          if (!tab || !tab.status || (tab.status == 'complete' && !isReady && _tabsIds[tabId])) {
+            isReady = true;
+            clearInterval(interval);
 
-	// construct
+            chrome.tabs.sendMessage(tabId, {
+              '_id'                : _tabsIds[tabId],
+              '_handleConsolePacks': true,
+              'packs'              : consolePacks,
+            });
+          }
+        });
+      }, 100);
 
-	options = new Options(function(options) {
-		notificationsHandler = new NotificationsHandler(options);
-		messagesHandler = new MessagesHandler(options, notificationsHandler, self);
-		headersHandler = new HeadersHandler(messagesHandler);
+      setTimeout(function() {
+        if(!isReady) {
+          clearInterval(interval);
+        }
+      }, 10000);
+    }
+  }
 
-		var currentVersion = parseFloat(new RegExp('^\\d+\\.\\d+').exec(manifest.version)[0]);
+  /**
+   * This function would be triggered when the http header is received
+   */
+  function onHeadersReceived(info) {
+    const domain        = getUrlDomain(info.url);
+    const headerPackage = getHeaderValue(info['responseHeaders'], 'PHP-Console', 'php-console');
+    if (lastDomainsUrls[domain] == info.url || headerPackage) {
 
-		if(!chrome.extension.inIncognitoContext && options['version'] != currentVersion) {
-			if(!options['version']) {
-				// on installed
-				var link = 'https://github.com/barbushin/php-console#php-console-server-library';
-				notificationsHandler.showNotification({
-					'type': 'update',
-					'subject': manifest['name'] + ' installed',
-					'permanent': true,
-					'data': 'To use PHP Console on your server you need to install PHP Console server library.',
-					'buttons': [
-						{
-							'title': 'PHP Console server library Installation & Usage Guide',
-							'url': link,
-							'icon': 'img/right.png'
-						}
-					]
-				});
-				options['version'] = currentVersion;
-			}
-			else {
-				options['version'] = currentVersion;
-			}
-		}
-	});
+      let pack = {
+        'tabId' : info.tabId <= 0 ? null : info.tabId,
+        'url'   : info.url,
+        'domain': getUrlDomain(info.url)
+      };
+
+      // Add header values to pack
+      if (headerPackage) {
+        lastDomainsUrls[pack['domain']] = pack['url'];
+        pack = Object.assign(pack, JSON.parse(headerPackage));
+      }
+
+      if (pack['tabId']) {
+        chrome.tabs.get(pack['tabId'], function(tab) {
+          pack['tabUrl'] = tab.url;
+          packsQueue.push(pack);
+          handleMessagesPacksQueue();
+        });
+      }
+    }
+  }
+
+  /**
+   * Listen to the _registerTab message
+   */
+  chrome.extension.onMessage.addListener(function(request, sender, sendResponse) {
+    if (!request['_registerTab']) {
+      return false;
+    }
+
+    // Skip the "chrome-extension://" page
+    const url = request['url'];
+    if (url.indexOf('chrome-extension://') == 0) {
+      return true;
+    }
+
+    // Register tab and create the headers-receive handler
+    const domain       = getUrlDomain(url);
+    const baseDomain   = getBaseDomain(domain);
+    let listenerReload = false;
+
+    if (!listenDomains[baseDomain]) {
+      listenDomains[baseDomain] = true;
+
+      const filter = {
+        'urls' : ['*://*.' + baseDomain + '/*'],
+        'types': ['main_frame', 'sub_frame', 'xmlhttprequest', 'other']
+      };
+      chrome.webRequest.onCompleted.addListener(onHeadersReceived, filter, ['responseHeaders']);
+      chrome.webRequest.onBeforeRedirect.addListener(onHeadersReceived, filter, ['responseHeaders']);
+
+      listenerReload = true;
+    }
+
+    saveCookie(sender.tab.id, domain, function(cookieReload) {
+      const id = _tabsIndex++;
+      _tabsIds[sender.tab.id] = id;
+      sendResponse({
+        'id' : id,
+        'url': (listenerReload || cookieReload ? url : '')
+      });
+    });
+
+    return true;
+  });
 };
 document.addEventListener('DOMContentLoaded', window['app'], false);
