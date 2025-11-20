@@ -4,13 +4,13 @@
 	"description": "Display PHP errors & vars dumps in Google Chrome console and notification popups, execute PHP code remotely.",
 	"homepage_url": "https://github.com/barbushin/php-console",
 
-	"page_action": {
+	"action": {
 		"default_icon": "img/logo_16.png",
 		"default_title": "PHP Console is enabled on server. Right click on the page to access configuration menu."
 	},
 
 	"background": {
-		"page": "background.html"
+		"service_worker": "background.js"
 	},
 	"minimum_chrome_version": "30",
 
@@ -30,15 +30,20 @@
 	},
 
 	"web_accessible_resources": [
-		"notification/style.css",
-		"notification/popup.js",
-		"notification/popup.html"
+		{
+			"resources": [
+				"notification/style.css",
+				"notification/popup.js",
+				"notification/popup.html"
+			],
+			"matches": [ "http://*/*", "https://*/*" ]
+		}
 	],
 
 	"incognito": "split",
-	"permissions": [ "contextMenus", "tabs", "notifications", "webRequest", "*://*/*", "storage", "clipboardWrite", "cookies", "webNavigation", "webRequestBlocking", "unlimitedStorage" ],
-	"content_security_policy": "script-src 'self' https://ssl.google-analytics.com; object-src 'self'",
+	"permissions": [ "contextMenus", "tabs", "notifications", "webRequest", "storage", "clipboardWrite", "cookies", "webNavigation", "unlimitedStorage" ],
+	"host_permissions": [ "*://*/*" ],
 	"offline_enabled": true,
-	"manifest_version": 2,
-	"version": "3.1.0"
+	"manifest_version": 3,
+	"version": "3.2.0"
 }

@@ -11,7 +11,7 @@ if (serverProtocol) {
   /**
    * Listen to the _handleConsolePacks message
    */
-  chrome.extension.onMessage.addListener(function(request) {
+  chrome.runtime.onMessage.addListener(function(request) {
     if (request['_id'] != id || !request['_handleConsolePacks']) {
       return;
     }
